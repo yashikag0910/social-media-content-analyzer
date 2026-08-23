@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Social Media Content Analyzer</title>
+    <meta
+      name="description"
+      content="Extract text from PDFs and images, then get actionable suggestions to improve social media engagement."
+    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="masthead">
+        <h1>Social Media Content Analyzer</h1>
+        <p>
+          Drop in a PDF or an image of a post. We pull the text out — parsing the PDF's
+          layout or running OCR on scans — then score it and suggest ways to lift engagement.
+        </p>
+      </header>
+
+      <main>
+        <!-- Step 1: intake -->
+        <section class="panel" aria-labelledby="upload-heading">
+          <h2 id="upload-heading" class="panel__title">1 · Upload a document</h2>
+
+          <div
+            class="dropzone"
+            id="dropzone"
+            role="button"
+            tabindex="0"
+            aria-describedby="dropzone-hint"
+          >
+            <svg class="dropzone__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <p class="dropzone__lead">
+              <strong>Drag &amp; drop</strong> a file here, or <strong>click to browse</strong>
+            </p>
+            <p class="dropzone__hint" id="dropzone-hint">
+              PDF, PNG, JPG, WEBP, BMP or GIF · up to 20&nbsp;MB
+            </p>
+            <input
+              type="file"
+              id="file-input"
+              class="visually-hidden"
+              accept="application/pdf,image/png,image/jpeg,image/webp,image/bmp,image/gif"
+            />
+          </div>
+
+          <div class="controls">
+            <label class="control">
+              <span class="control__label">Target platform</span>
+              <select id="platform-select" class="control__input">
+                <option value="generic">Generic / any network</option>
+                <option value="twitter">X (Twitter)</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="instagram">Instagram</option>
+                <option value="facebook">Facebook</option>
+              </select>
+            </label>
+            <button type="button" id="reset-btn" class="btn btn--ghost" hidden>
+              Clear &amp; start over
+            </button>
+          </div>
+
+          <!-- Live status: loading states, progress, errors -->
+          <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+        </section>
+
+        <!-- Step 2 + 3: results, revealed once a file is processed -->
+        <div id="results" class="results" hidden>
+          <section class="panel" aria-labelledby="text-heading">
+            <div class="panel__header">
+              <h2 id="text-heading" class="panel__title">2 · Extracted text</h2>
+              <button type="button" id="copy-btn" class="btn btn--ghost btn--sm">Copy</button>
+            </div>
+            <dl class="meta" id="extraction-meta"></dl>
+            <pre class="extracted" id="extracted-text" tabindex="0"></pre>
+          </section>
+
+          <section class="panel" aria-labelledby="analysis-heading">
+            <h2 id="analysis-heading" class="panel__title">3 · Engagement analysis</h2>
+            <div class="score" id="score"></div>
+            <ul class="metrics" id="metrics"></ul>
+            <h3 class="subhead">Suggestions</h3>
+            <ul class="suggestions" id="suggestions"></ul>
+          </section>
+        </div>
+      </main>
+
+      <footer class="colophon">
+        Everything runs in your browser — no file ever leaves this device.
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

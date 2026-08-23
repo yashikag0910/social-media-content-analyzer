@@ -1,0 +1,18 @@
+{
+  "name": "social-media-content-analyzer",
+  "version": "1.0.0",
+  "description": "Upload PDFs or images, extract their text via PDF parsing or OCR, and get actionable engagement suggestions for social media posts.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.1"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7"
+  }
+}
