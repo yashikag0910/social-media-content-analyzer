@@ -1,5 +1,5 @@
 /**
- * PDF text extraction with layout reconstruction.
+ * PDF text extraction with layout reconstruction and provenance.
  *
  * pdf.js hands back a flat list of positioned text runs, not lines or
  * paragraphs. Naively concatenating `item.str` collapses a formatted post into
@@ -8,6 +8,10 @@
  * lines by their baseline, insert spaces where there is a horizontal gap,
  * insert blank lines where there is a vertical one, and keep relative indents
  * so bullets and nested lists survive.
+ *
+ * Those same coordinates are kept rather than discarded, converted into
+ * page-image pixel space, so every line of output can point back at the exact
+ * region of the document it came from.
  */
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -22,13 +26,15 @@ const SPACE_GAP_RATIO = 0.22;
 const PARAGRAPH_GAP_RATIO = 1.6;
 /** Below this many characters per page we assume the PDF is a scan, not real text. */
 const SCANNED_CHARS_PER_PAGE = 24;
-/** Rendering scale for the OCR fallback — enough resolution for Tesseract. */
-const OCR_RENDER_SCALE = 2;
-
 /**
- * @param {ArrayBuffer} buffer
- * @returns {Promise<import('pdfjs-dist').PDFDocumentProxy>}
+ * Width, in pixels, that pages are rasterised to. One render serves both the
+ * source-map preview and OCR: on a letter-size page this is roughly 145 DPI,
+ * which Tesseract reads reliably without the memory cost of a 300 DPI scan.
  */
+const RENDER_WIDTH = 1200;
+/** Cap on preview images held in memory; text is still extracted from every page. */
+const MAX_PREVIEW_PAGES = 12;
+
 async function loadDocument(buffer) {
   try {
     return await pdfjs.getDocument({ data: buffer, isEvalSupported: false }).promise;
@@ -51,10 +57,7 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-/**
- * Turn pdf.js text items into positioned line objects.
- * @param {Array<object>} items
- */
+/** Turn pdf.js text items into positioned line objects, in PDF user space. */
 function groupIntoLines(items) {
   const runs = items
     .filter((item) => typeof item.str === 'string' && item.str.trim() !== '')
@@ -90,14 +93,13 @@ function groupIntoLines(items) {
     line.runs.sort((a, b) => a.x - b.x);
     line.x = line.runs[0].x;
     line.height = median(line.runs.map((run) => run.height)) || lineHeight;
+    line.right = Math.max(...line.runs.map((run) => run.x + run.width));
     line.text = line.runs.reduce((acc, run, index) => {
       if (index === 0) return run.text;
       const previous = line.runs[index - 1];
       const gap = run.x - (previous.x + previous.width);
       const needsSpace =
-        gap > previous.height * SPACE_GAP_RATIO &&
-        !/\s$/.test(acc) &&
-        !/^\s/.test(run.text);
+        gap > previous.height * SPACE_GAP_RATIO && !/\s$/.test(acc) && !/^\s/.test(run.text);
       return acc + (needsSpace ? ' ' : '') + run.text;
     }, '');
   }
@@ -106,48 +108,71 @@ function groupIntoLines(items) {
 }
 
 /**
- * Render grouped lines back to text, restoring blank lines and indentation.
+ * Convert a line's PDF-space extent into a box in rendered-page pixel space.
+ * Ascender and descender are approximated from the font height, since pdf.js
+ * reports a baseline rather than a glyph bounding box.
  */
-function linesToText({ lines, lineHeight }) {
-  if (lines.length === 0) return '';
+function lineToBox(line, viewport) {
+  const top = line.y + line.height * 0.82;
+  const bottom = line.y - line.height * 0.22;
+  const [x0, y0] = viewport.convertToViewportPoint(line.x, top);
+  const [x1, y1] = viewport.convertToViewportPoint(line.right, bottom);
+  return {
+    x: Math.min(x0, x1),
+    y: Math.min(y0, y1),
+    w: Math.max(Math.abs(x1 - x0), 2),
+    h: Math.max(Math.abs(y1 - y0), 2),
+  };
+}
+
+/**
+ * Render grouped lines into text entries, restoring blank lines and indentation
+ * while keeping each entry's source box.
+ */
+function toEntries({ lines, lineHeight }, { page, viewport }) {
+  if (lines.length === 0) return [];
 
   const leftMargin = Math.min(...lines.map((line) => line.x));
-  const out = [];
 
-  lines.forEach((line, index) => {
+  return lines.map((line, index) => {
+    let blankBefore = false;
     if (index > 0) {
       const previous = lines[index - 1];
-      const verticalGap = previous.y - line.y;
       const threshold = Math.max(previous.height, lineHeight) * PARAGRAPH_GAP_RATIO;
-      if (verticalGap > threshold) out.push('');
+      blankBefore = previous.y - line.y > threshold;
     }
     // Approximate character width, so indents land in sensible units.
     const charWidth = line.height * 0.5 || 5;
     const indent = Math.min(Math.round((line.x - leftMargin) / charWidth), 12);
-    out.push((indent > 0 ? ' '.repeat(indent) : '') + line.text.trim());
-  });
 
-  return out.join('\n');
+    return {
+      text: line.text.trim(),
+      indent,
+      blankBefore,
+      page,
+      box: viewport ? lineToBox(line, viewport) : null,
+      confidence: null,
+    };
+  });
 }
 
-/**
- * Rasterise a page so Tesseract can read it.
- * @returns {Promise<HTMLCanvasElement>}
- */
-async function renderPageToCanvas(page) {
-  const viewport = page.getViewport({ scale: OCR_RENDER_SCALE });
+/** Rasterise a page. The result serves as both preview image and OCR input. */
+async function renderPage(page) {
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(RENDER_WIDTH / base.width, 3);
+  const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = Math.floor(viewport.width);
   canvas.height = Math.floor(viewport.height);
   const context = canvas.getContext('2d', { willReadFrequently: true });
-  // A white backdrop: transparent PDFs otherwise OCR as black-on-black.
+  // A white backdrop: transparent PDFs otherwise render as black-on-black.
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, canvas.width, canvas.height);
   // `intent: 'print'` is what switches pdf.js off requestAnimationFrame-driven
   // rendering. rAF is frozen in a background tab, so the default intent would
-  // leave this promise pending forever if the user switched away mid-OCR.
+  // leave this promise pending forever if the user switched away mid-render.
   await page.render({ canvasContext: context, viewport, intent: 'print' }).promise;
-  return canvas;
+  return { canvas, viewport };
 }
 
 /**
@@ -156,63 +181,115 @@ async function renderPageToCanvas(page) {
  * @param {File} file
  * @param {object} options
  * @param {(progress: {phase: string, ratio: number, detail?: string}) => void} options.onProgress
- * @param {(canvas: HTMLCanvasElement, page: number, total: number) => Promise<string>} options.ocrPage
+ * @param {(canvas: HTMLCanvasElement, page: number, total: number) => Promise<{entries: Array<object>, confidence: number}>} options.ocrPage
  *   Injected so this module stays independent of the OCR engine.
- * @returns {Promise<{text: string, method: string, pages: number, notes: string[]}>}
  */
 export async function extractFromPdf(file, { onProgress, ocrPage }) {
   onProgress({ phase: 'Reading file', ratio: 0.02 });
   const buffer = await file.arrayBuffer();
 
-  onProgress({ phase: 'Opening PDF', ratio: 0.06 });
+  onProgress({ phase: 'Opening PDF', ratio: 0.05 });
   const doc = await loadDocument(buffer);
   const notes = [];
+  const pageImages = [];
 
   try {
-    const pageTexts = [];
-    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+    /* Pass 1: text layer only — cheap, and it decides whether OCR is needed. */
+    const perPageLines = [];
+    let totalChars = 0;
+    for (let number = 1; number <= doc.numPages; number += 1) {
       onProgress({
         phase: 'Extracting text',
-        ratio: 0.06 + 0.54 * (pageNumber / doc.numPages),
-        detail: `page ${pageNumber} of ${doc.numPages}`,
+        ratio: 0.05 + 0.35 * (number / doc.numPages),
+        detail: `page ${number} of ${doc.numPages}`,
       });
-      const page = await doc.getPage(pageNumber);
-      const content = await page.getTextContent();
-      pageTexts.push(linesToText(groupIntoLines(content.items)));
+      const page = await doc.getPage(number);
+      const grouped = groupIntoLines((await page.getTextContent()).items);
+      perPageLines.push(grouped);
+      totalChars += grouped.lines.reduce((sum, line) => sum + line.text.replace(/\s/g, '').length, 0);
       page.cleanup();
     }
 
-    const text = pageTexts.join('\n\n').trim();
-    const density = text.replace(/\s/g, '').length / doc.numPages;
-
-    if (density >= SCANNED_CHARS_PER_PAGE) {
-      onProgress({ phase: 'Done', ratio: 1 });
-      return { text, method: 'PDF text layer', pages: doc.numPages, notes };
+    const isScanned = totalChars / doc.numPages < SCANNED_CHARS_PER_PAGE;
+    if (isScanned) {
+      notes.push('No usable text layer was found, so each page was rendered and read with OCR.');
+    }
+    const previewPages = Math.min(doc.numPages, MAX_PREVIEW_PAGES);
+    if (doc.numPages > previewPages) {
+      notes.push(
+        `Source map shows the first ${previewPages} of ${doc.numPages} pages; text was extracted from all of them.`
+      );
     }
 
-    // Little or no embedded text: this is almost certainly a scan, so rasterise
-    // each page and hand it to OCR rather than reporting an empty document.
-    notes.push(
-      'No usable text layer was found, so each page was rendered and read with OCR.'
-    );
-    const ocrTexts = [];
-    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
-      const page = await doc.getPage(pageNumber);
-      const canvas = await renderPageToCanvas(page);
-      ocrTexts.push(await ocrPage(canvas, pageNumber, doc.numPages));
-      page.cleanup();
-      canvas.width = 0;
-      canvas.height = 0;
+    /* Pass 2: rasterise for the source map, and for OCR when the text layer is absent. */
+    const entries = [];
+    const confidences = [];
+    const pagesToRender = isScanned ? doc.numPages : previewPages;
+
+    for (let number = 1; number <= doc.numPages; number += 1) {
+      const needsRender = number <= pagesToRender;
+      let viewport = null;
+
+      if (needsRender) {
+        onProgress({
+          phase: isScanned ? 'Rendering page for OCR' : 'Building source map',
+          ratio: 0.4 + 0.15 * (number / pagesToRender),
+          detail: `page ${number} of ${pagesToRender}`,
+        });
+        const page = await doc.getPage(number);
+        const rendered = await renderPage(page);
+        viewport = rendered.viewport;
+
+        if (isScanned) {
+          const result = await ocrPage(rendered.canvas, number, doc.numPages);
+          entries.push(...result.entries.map((entry) => ({ ...entry, page: number })));
+          if (result.confidence > 0) confidences.push(result.confidence);
+        }
+
+        if (number <= previewPages) {
+          pageImages.push({
+            page: number,
+            src: rendered.canvas.toDataURL('image/jpeg', 0.82),
+            width: rendered.canvas.width,
+            height: rendered.canvas.height,
+          });
+        }
+        rendered.canvas.width = 0;
+        rendered.canvas.height = 0;
+        page.cleanup();
+      }
+
+      if (!isScanned) {
+        entries.push(...toEntries(perPageLines[number - 1], { page: number, viewport }));
+      }
     }
 
     onProgress({ phase: 'Done', ratio: 1 });
     return {
-      text: ocrTexts.join('\n\n').trim(),
-      method: 'OCR (scanned PDF)',
+      text: entriesToText(entries),
+      entries,
+      pageImages,
+      method: isScanned ? 'OCR (scanned PDF)' : 'PDF text layer',
       pages: doc.numPages,
+      confidence: confidences.length
+        ? confidences.reduce((a, b) => a + b, 0) / confidences.length
+        : undefined,
       notes,
     };
   } finally {
     await doc.destroy();
   }
+}
+
+/**
+ * Flatten entries back into the plain text the analyzer scores. Kept here so
+ * the text and the source map can never disagree about what was extracted.
+ */
+export function entriesToText(entries) {
+  const out = [];
+  entries.forEach((entry, index) => {
+    if (entry.blankBefore && index > 0) out.push('');
+    out.push(' '.repeat(entry.indent ?? 0) + entry.text);
+  });
+  return out.join('\n').trim();
 }

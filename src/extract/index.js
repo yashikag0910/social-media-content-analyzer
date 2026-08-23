@@ -75,17 +75,15 @@ export async function extractText(file, { onProgress }) {
     return extractFromPdf(file, {
       onProgress,
       // OCR fallback for scanned PDFs, spread across the tail of the progress bar.
-      ocrPage: async (canvas, pageNumber, totalPages) => {
-        const { text } = await recognize(canvas, ({ phase, ratio }) => {
+      ocrPage: (canvas, pageNumber, totalPages) =>
+        recognize(canvas, ({ phase, ratio }) => {
           const pageShare = (pageNumber - 1 + ratio) / totalPages;
           onProgress({
             phase,
-            ratio: 0.6 + 0.4 * pageShare,
+            ratio: 0.55 + 0.45 * pageShare,
             detail: `page ${pageNumber} of ${totalPages}`,
           });
-        });
-        return text;
-      },
+        }),
     });
   }
 

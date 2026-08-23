@@ -5,6 +5,15 @@ parsing the PDF's layout, or running OCR on a scan — scores the post for
 engagement against the target platform, and returns specific, ranked changes
 that would improve it.
 
+Two things make it more than a text-dump-plus-checklist:
+
+1. **A source map.** Every extracted line is boxed over the rendered page and
+   linked both ways to the text, and OCR words the engine was unsure about are
+   outlined in red. Extraction is auditable instead of a black box.
+2. **A rewrite engine.** It applies its own findings and hands back the improved
+   draft with a before/after score, separating mechanical edits to your words
+   from copy it wrote itself.
+
 **Live app:** _add your deployed URL here_
 
 Everything runs in the browser. No server, no API keys, and no file ever leaves
@@ -29,12 +38,43 @@ the user's device.
   text, each page is rendered to a canvas and passed through OCR instead of
   reporting an empty document.
 
+**Source map — extraction you can audit**
+
+Most tools hand back a wall of text and ask you to trust it. This one keeps the
+geometry that pdf.js and Tesseract already produce and normally throws away, so
+every extracted line points back at the exact region it came from:
+
+- The rendered page sits beside the text with a box over every extracted line
+- Hover or click either side and the other highlights; clicking a line from
+  another page switches the page view to follow it
+- On OCR, words Tesseract was unsure about are outlined in red and counted in
+  the margin — a misread digit becomes *visible* instead of silently wrong
+- Boxes are positioned in percentages of the page's intrinsic size, so the
+  overlay stays aligned at any width
+
 **Engagement analysis**
 - A 0–100 score with a breakdown across 13 weighted heuristics
 - Suggestions ranked by how many points each one would actually recover, so the
   highest-leverage fix is always first
 - Per-platform targets for X, LinkedIn, Instagram, Facebook and a generic
   profile; switching platform re-scores instantly without re-extracting
+
+**Rewrite engine — the fixed post, not just the critique**
+
+Anyone can print "add a call to action". This applies its own findings and
+returns the improved draft, re-scored:
+
+- **Mechanical edits** transform the author's own words and cannot invent
+  meaning: delete filler, calm shouted caps and exclamation runs, group
+  scattered hashtags into a closing line, break walls of text into scannable
+  paragraphs, split an over-long hook at a sentence seam, trim to the platform
+  limit at a word boundary.
+- **Added copy** is anything the engine wrote itself — a closing ask, discovery
+  hashtags derived from the post's own salient terms. It is labelled
+  differently and described as a placeholder to replace, never passed off as
+  the author's voice.
+- Every edit is listed with what it did and why, and the panel shows the score
+  before and after, so the diff is auditable rather than a black box.
 
 **UX**
 - Determinate progress for every phase — PDF page count, OCR engine load, and
@@ -90,9 +130,11 @@ src/
     rules.js          the 13 weighted heuristics and their advice
     lexicon.js        platform targets and word lists
     analyzer.js       scoring and suggestion ranking
+    rewrite.js        the transforms that produce the improved draft
   ui/
     dropzone.js       drag-and-drop and file picker
     status.js         the live status region
+    sourcemap.js      the page overlay and its two-way link to the text
     render.js         results rendering
 ```
 
@@ -119,6 +161,17 @@ is stated by the rule itself rather than inferred from a score threshold —
 otherwise a card headed *working well* can end up carrying advice that reads
 *add an emoji*.
 
+**Extraction is treated as a claim, not a fact.** Both engines produce
+coordinates and, in Tesseract's case, per-word confidence. Discarding that is
+what makes an extractor a black box. Keeping it costs one render pass and turns
+the output into something a reader can check — which matters most exactly when
+OCR is least reliable.
+
+**The draft is modelled as a body plus closing blocks,** not one string. That
+separation is what lets the length trim cut prose without eating the call to
+action it just added — trimming a flat string always destroys whatever sits at
+the end, which is precisely the part that earns replies.
+
 **`intent: 'print'` when rasterising PDF pages.** pdf.js drives canvas
 rendering with `requestAnimationFrame`, which browsers freeze in a background
 tab. The default intent would leave OCR of a scanned PDF hanging forever if the
@@ -136,28 +189,35 @@ user switched tabs; the print intent renders synchronously instead.
   metadata so a bad read is visible rather than silent.
 - Platform targets are published guidance, not per-account analytics. They are
   a starting point to tune, not ground truth.
+- The source map previews the first 12 pages of a long PDF; text is still
+  extracted from every page.
+- Line boxes are derived from baselines and font height, not true glyph bounding
+  boxes, so they sit a pixel or two proud of tall ascenders.
+- The rewrite engine will not restructure an argument or fix a weak idea. It
+  applies the mechanical fixes and flags the rest as needing your judgement.
 
 ---
 
 ## Approach
 
-The app is a static, client-side Vite build with two runtime dependencies:
-pdf.js and Tesseract.js.
+A static client-side Vite build with two runtime dependencies: pdf.js and
+Tesseract.js.
 
-Extraction routes on file type. For PDFs, the hard part is that pdf.js returns
-positioned glyph runs rather than lines, and naively joining them collapses a
-formatted post into one blob — which then corrupts every readability metric
-downstream. So the extractor rebuilds structure from the coordinates: group
-runs into lines by baseline, add spaces at horizontal gaps, add blank lines at
-vertical ones, keep relative indents. If a PDF turns out to carry almost no
-embedded text, it is a scan, and each page is rendered to canvas and sent
-through OCR instead. Images go straight to OCR, with the Tesseract worker
-created once and reused.
+Both engines emit coordinates, and Tesseract emits per-word confidence. Most
+implementations throw all of it away and return a wall of text you have to
+trust. Keeping it is what this project is built around.
 
-Analysis is deliberately rule-based, not an LLM call: deterministic,
-explainable, instant, free, and no key to provision for a hosted demo.
-`metrics.js` measures; `rules.js` judges. Thirteen weighted heuristics cover
-length, hook, call to action, hashtags, emoji, readability, structure,
-specificity, tone, concision, emphasis and links, each scored against the
-selected platform's targets. Suggestions are ranked by the points each one
-would recover, so the highest-leverage fix is always first.
+For PDFs, pdf.js returns positioned glyph runs rather than lines; joining them
+naively collapses a formatted post into one blob and corrupts every readability
+metric downstream. So the extractor rebuilds structure from the coordinates —
+lines by baseline, spaces from horizontal gaps, paragraphs from vertical ones —
+and keeps each line's box. A PDF carrying almost no embedded text is a scan, so
+its pages are rendered and sent through OCR instead. The result is a source
+map: the rendered page beside the text, every line boxed and linked both ways,
+with low-confidence OCR words outlined so a misread is visible rather than
+silent.
+
+Analysis is rule-based, not an LLM call: deterministic, explainable, no key to
+provision. `metrics.js` measures, `rules.js` judges, and `rewrite.js` applies
+those findings back to the post — separating mechanical edits from copy it
+wrote itself — and re-scores the draft.

@@ -100,6 +100,21 @@ export const NEGATIVE_WORDS = [
   'danger', 'warning', 'crisis', 'boring', 'confusing', 'painful',
 ];
 
+/** Function words the hashtag deriver must never surface as a topic. */
+export const STOPWORDS = new Set([
+  'this', 'that', 'these', 'those', 'there', 'their', 'them', 'they', 'then',
+  'than', 'with', 'without', 'from', 'into', 'onto', 'over', 'under', 'about',
+  'after', 'before', 'while', 'when', 'where', 'which', 'what', 'because',
+  'been', 'being', 'have', 'having', 'here', 'just', 'like', 'more', 'most',
+  'much', 'some', 'such', 'only', 'other', 'same', 'still', 'very', 'were',
+  'will', 'would', 'could', 'should', 'your', 'yours', 'ours', 'mine', 'also',
+  'each', 'every', 'both', 'many', 'made', 'make', 'makes', 'take', 'takes',
+  'went', 'goes', 'going', 'does', 'done', 'said', 'says', 'know', 'knew',
+  'thing', 'things', 'something', 'anything', 'everything', 'nothing',
+  'really', 'actually', 'basically', 'first', 'last', 'next', 'time', 'times',
+  'even', 'ever', 'never', 'always', 'again', 'back', 'down', 'through',
+]);
+
 /** Matches most emoji, including flags and skin-tone sequences. */
 export const EMOJI_PATTERN =
   /\p{Extended_Pictographic}(️|‍\p{Extended_Pictographic}|\p{Emoji_Modifier})*/gu;

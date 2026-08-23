@@ -74,7 +74,7 @@ body {
 }
 
 .app {
-  max-width: 900px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 48px 20px 64px;
 }
@@ -338,16 +338,147 @@ body {
   font-weight: 600;
 }
 
-.extracted {
-  max-height: 380px;
+.panel__lede {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+}
+
+/* ---------- Provenance: source map + linked text ---------- */
+.provenance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.pagebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.pagebar__btn {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pagebar__btn[aria-pressed='true'] {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.pageview {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.pageview__frame {
+  position: relative;
+  width: 100%;
+}
+
+.pageview__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.pageview__overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.pageview__empty {
   margin: 0;
-  padding: 16px;
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+/* One box per extracted line, positioned in % of the page's intrinsic size. */
+.linebox {
+  position: absolute;
+  padding: 0;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 2px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.linebox:hover,
+.linebox:focus-visible {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.linebox--active {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Drawn only for words OCR was unsure about, so doubt is what stands out. */
+.wordbox {
+  position: absolute;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  border-bottom: 2px solid var(--bad);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+.legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.swatch--ok {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 1px solid var(--accent);
+}
+
+.swatch--low {
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+  border: 1px solid var(--bad);
+}
+
+.extracted {
+  max-height: 420px;
+  margin: 0;
+  padding: 12px;
   overflow: auto;
   font-family: var(--mono);
-  font-size: 13.5px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.65;
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -356,6 +487,161 @@ body {
 .extracted--empty {
   color: var(--ink-faint);
   font-style: italic;
+}
+
+.extracted__empty {
+  margin: 0;
+}
+
+.line {
+  display: block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.line:hover,
+.line:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
+
+.line--active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-left-color: var(--accent);
+}
+
+.line--blank {
+  height: 0.7em;
+  padding: 0;
+  cursor: default;
+}
+
+.line--blank:hover {
+  background: none;
+}
+
+.line__flag {
+  display: inline-block;
+  min-width: 15px;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-family: var(--font);
+  font-weight: 700;
+  text-align: center;
+  color: var(--surface);
+  background: var(--bad);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+/* ---------- Improved draft ---------- */
+.delta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.delta__score {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.delta__score--after[data-tone='good'] {
+  color: var(--good);
+}
+.delta__score--after[data-tone='warn'] {
+  color: var(--warn);
+}
+.delta__score--after[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.delta__arrow {
+  font-size: 18px;
+  color: var(--ink-faint);
+}
+
+.delta__label {
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+
+.edits {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.edit {
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--good);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+/* Copy this engine wrote is marked differently from edits to the author's own words. */
+.edit[data-kind='added'] {
+  border-left-color: var(--warn);
+  border-left-style: dashed;
+}
+
+.edit__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edit__label {
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.edit__kind {
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.edit__detail {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-muted);
+}
+
+.draft {
+  max-height: 340px;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+.rewrite__none {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-muted);
 }
 
 /* ---------- Score ---------- */
@@ -548,6 +834,12 @@ body {
   text-align: center;
   font-size: 13px;
   color: var(--ink-faint);
+}
+
+@media (max-width: 760px) {
+  .provenance {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 560px) {

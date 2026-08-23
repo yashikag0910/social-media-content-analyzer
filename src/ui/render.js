@@ -3,6 +3,7 @@
  */
 import { escapeHtml } from './status.js';
 import { formatBytes } from '../extract/index.js';
+import { LOW_CONFIDENCE } from '../extract/ocr.js';
 
 const SEVERITY_LABEL = { high: 'High impact', medium: 'Worth fixing', low: 'Polish' };
 
@@ -25,12 +26,101 @@ export function renderExtraction({ metaElement, textElement }, { file, result })
     )
     .join('');
 
-  textElement.textContent = result.text || '';
+  renderLines(textElement, result);
+}
+
+/**
+ * Render the extracted text as individually addressable lines rather than one
+ * text blob, so each one can be linked to its region in the source map.
+ */
+function renderLines(textElement, result) {
+  const entries = result.entries ?? [];
   textElement.classList.toggle('extracted--empty', result.text.length === 0);
+
   if (result.text.length === 0) {
-    textElement.textContent =
-      'No readable text was found in this file. If it is a photo, try a sharper, better-lit image.';
+    textElement.innerHTML =
+      '<p class="extracted__empty">No readable text was found in this file. ' +
+      'If it is a photo, try a sharper, better-lit image.</p>';
+    return;
   }
+
+  textElement.innerHTML = entries
+    .map((entry, index) => {
+      const doubtful = (entry.words ?? []).filter((word) => word.confidence < LOW_CONFIDENCE);
+      const flag = doubtful.length
+        ? `<span class="line__flag" title="${escapeHtml(
+            `${doubtful.length} low-confidence word(s): ${doubtful.map((word) => word.text).join(', ')}`
+          )}">${doubtful.length}</span>`
+        : '';
+      return (
+        `${entry.blankBefore && index > 0 ? '<span class="line line--blank"></span>' : ''}` +
+        `<span class="line" data-index="${index}" tabindex="0" role="button"` +
+        ` aria-label="Show where this line came from">` +
+        `${escapeHtml(' '.repeat(entry.indent ?? 0) + entry.text)}${flag}</span>`
+      );
+    })
+    .join('');
+}
+
+/** Highlight one line and bring it into view. */
+export function focusLine(textElement, index) {
+  textElement.querySelectorAll('.line--active').forEach((line) => {
+    line.classList.remove('line--active');
+  });
+  const line = textElement.querySelector(`.line[data-index="${index}"]`);
+  if (!line) return;
+  line.classList.add('line--active');
+  line.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+const EDIT_KIND_LABEL = {
+  mechanical: 'Applied automatically',
+  added: 'New copy — replace it',
+};
+
+/**
+ * Render the improved draft: the score it now earns, what changed and why, and
+ * the draft itself.
+ */
+export function renderRewrite(element, result) {
+  if (!result || (!result.changed && result.edits.length === 0)) {
+    element.innerHTML =
+      '<p class="rewrite__none">Nothing to rewrite — every mechanical fix this engine ' +
+      'knows about is already applied in the original. The remaining suggestions above ' +
+      'need your judgement, not a transform.</p>';
+    return;
+  }
+
+  const delta = result.after - result.before;
+  const tone = delta > 0 ? 'good' : delta < 0 ? 'bad' : 'warn';
+
+  element.innerHTML = `
+    <div class="delta">
+      <span class="delta__score">${result.before}</span>
+      <span class="delta__arrow" aria-hidden="true">→</span>
+      <span class="delta__score delta__score--after" data-tone="${tone}">${result.after}</span>
+      <span class="delta__label">
+        ${delta > 0 ? `+${delta} points` : delta < 0 ? `${delta} points` : 'no score change'}
+        after ${result.edits.length} edit(s)
+      </span>
+    </div>
+
+    <ul class="edits">
+      ${result.edits
+        .map(
+          (edit) => `
+        <li class="edit" data-kind="${edit.kind}">
+          <div class="edit__head">
+            <span class="edit__label">${escapeHtml(edit.label)}</span>
+            <span class="edit__kind">${EDIT_KIND_LABEL[edit.kind]}</span>
+          </div>
+          <p class="edit__detail">${escapeHtml(edit.detail)}</p>
+        </li>`
+        )
+        .join('')}
+    </ul>
+
+    <pre class="draft" id="draft-text">${escapeHtml(result.text)}</pre>`;
 }
 
 export function renderAnalysis({ scoreElement, metricsElement, suggestionsElement }, analysis) {

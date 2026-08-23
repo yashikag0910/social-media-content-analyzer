@@ -76,15 +76,32 @@
           <div id="status" class="status" role="status" aria-live="polite" hidden></div>
         </section>
 
-        <!-- Step 2 + 3: results, revealed once a file is processed -->
+        <!-- Steps 2–4: results, revealed once a file is processed -->
         <div id="results" class="results" hidden>
           <section class="panel" aria-labelledby="text-heading">
             <div class="panel__header">
-              <h2 id="text-heading" class="panel__title">2 · Extracted text</h2>
-              <button type="button" id="copy-btn" class="btn btn--ghost btn--sm">Copy</button>
+              <h2 id="text-heading" class="panel__title">2 · Extraction &amp; source map</h2>
+              <button type="button" id="copy-btn" class="btn btn--ghost btn--sm">Copy text</button>
             </div>
             <dl class="meta" id="extraction-meta"></dl>
-            <pre class="extracted" id="extracted-text" tabindex="0"></pre>
+            <p class="panel__lede">
+              Every line below is traced back to where it came from. Hover or click either
+              side to link them.
+            </p>
+
+            <div class="provenance">
+              <div class="provenance__doc">
+                <div class="pagebar" id="page-bar" hidden></div>
+                <div class="pageview" id="page-view"></div>
+                <div class="legend" id="confidence-legend" hidden>
+                  <span class="legend__item"><i class="swatch swatch--ok"></i>OCR confident</span>
+                  <span class="legend__item"><i class="swatch swatch--low"></i>Low confidence — check this word</span>
+                </div>
+              </div>
+              <div class="provenance__text">
+                <div class="extracted" id="extracted-text" tabindex="0"></div>
+              </div>
+            </div>
           </section>
 
           <section class="panel" aria-labelledby="analysis-heading">
@@ -93,6 +110,16 @@
             <ul class="metrics" id="metrics"></ul>
             <h3 class="subhead">Suggestions</h3>
             <ul class="suggestions" id="suggestions"></ul>
+          </section>
+
+          <section class="panel" aria-labelledby="rewrite-heading">
+            <div class="panel__header">
+              <h2 id="rewrite-heading" class="panel__title">4 · Improved draft</h2>
+              <button type="button" id="copy-draft-btn" class="btn btn--ghost btn--sm">
+                Copy draft
+              </button>
+            </div>
+            <div id="rewrite"></div>
           </section>
         </div>
       </main>
