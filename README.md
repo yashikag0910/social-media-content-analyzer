@@ -14,7 +14,7 @@ Two things make it more than a text-dump-plus-checklist:
    draft with a before/after score, separating mechanical edits to your words
    from copy it wrote itself.
 
-**Live app:** https://social-media-content-analyzer-ecpc54hh4.vercel.app
+**Live app:** https://social-media-content-analyzer-lime.vercel.app
 
 Everything runs in the browser. No server, no API keys, and no file ever leaves
 the user's device.
